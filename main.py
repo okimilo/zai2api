@@ -3,60 +3,38 @@ from fastapi.responses import StreamingResponse
 import requests
 import json
 import os
-import uuid
 from typing import List, Dict
 
-app = FastAPI(title="ZaiwenAI Web2API Proxy - Docker版")
+app = FastAPI(title="ZaiwenAI Web2API - 固定会话版")
 
-# 从环境变量读取（Docker / Render / Railway 都会自动读取）
 ZAIWENAI_TOKEN = os.getenv("ZAIWENAI_TOKEN")
+ZAIWENAI_CONVERSATION_ID = "69e4461e9ce2cafe2a4023e7"   # ← 你刚刚抓到的这个 conversation_id
 ZAIWENAI_BASE_URL = "https://back.zaiwenai.com/api/v1/ai/message/stream"
-
-if not ZAIWENAI_TOKEN:
-    raise ValueError("环境变量 ZAIWENAI_TOKEN 未设置！请在平台设置你的 token")
 
 @app.get("/")
 async def root():
-    return {
-        "status": "ok", 
-        "message": "🚀 ZaiwenAI Web2API Docker 版运行正常！请在 NewAPI / OpenWebUI 使用 /v1/chat/completions"
-    }
+    return {"status": "ok", "message": "🚀 ZaiwenAI Web2API 固定会话版已启动"}
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     try:
         body = await request.json()
     except:
-        raise HTTPException(status_code=400, detail="无效的 JSON")
+        raise HTTPException(status_code=400, detail="无效 JSON")
 
     messages: List[Dict] = body.get("messages", [])
     if not messages:
         raise HTTPException(status_code=400, detail="messages 为空")
 
-    # 动态 conversation_id（彻底解决上下文污染）
-    conv_id = request.headers.get("x-zaiwenai-conversation-id")
-    if not conv_id:
-        conv_id = str(uuid.uuid4())
-
-    # 把完整历史拼接成一条 prompt
-    prompt_parts = []
-    for msg in messages:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-        if role == "system":
-            prompt_parts.append(f"System: {content}")
-        elif role == "user":
-            prompt_parts.append(f"User: {content}")
-        elif role == "assistant":
-            prompt_parts.append(f"Assistant: {content}")
-    full_prompt = "\n\n".join(prompt_parts)
+    # 只取最后一条用户消息（和网页原始行为一致）
+    last_user_msg = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "你好")
 
     payload = {
-        "conversation_id": conv_id,
+        "conversation_id": ZAIWENAI_CONVERSATION_ID,
         "data": {
-            "content": full_prompt,
+            "content": last_user_msg,
             "model": body.get("model", "Gemini-3.0-Flash"),
-            "round": 20,
+            "round": 10,
             "type": "text",
             "online": False,
             "file": {},
@@ -95,14 +73,9 @@ async def chat_completions(request: Request):
                 try:
                     data = json.loads(line_str[6:])
                     if isinstance(data, dict) and "content" in data:
-                        content_chunk = data.get("content", "")
-                        if content_chunk:
-                            chunk = {
-                                "id": f"chatcmpl-{conv_id[:8]}",
-                                "object": "chat.completion.chunk",
-                                "choices": [{"delta": {"content": content_chunk}, "index": 0, "finish_reason": None}]
-                            }
-                            yield f"data: {json.dumps(chunk)}\n\n"
+                        content = data.get("content", "")
+                        if content:
+                            yield f'data: {json.dumps({"choices": [{"delta": {"content": content}}]})}\n\n'
                 except:
                     pass
             elif line_str == "data: [DONE]":
