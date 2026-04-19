@@ -5,15 +5,14 @@ import json
 import os
 from typing import List, Dict
 
-app = FastAPI(title="ZaiwenAI Web2API - 固定会话版")
+app = FastAPI(title="ZaiwenAI Web2API - 完美伪装版")
 
 ZAIWENAI_TOKEN = os.getenv("ZAIWENAI_TOKEN")
-ZAIWENAI_CONVERSATION_ID = "69e4461e9ce2cafe2a4023e7"   # ← 你刚刚抓到的这个 conversation_id
 ZAIWENAI_BASE_URL = "https://back.zaiwenai.com/api/v1/ai/message/stream"
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "message": "🚀 ZaiwenAI Web2API 固定会话版已启动"}
+    return {"status": "ok", "message": "🚀 ZaiwenAI Web2API 完美伪装版已启动"}
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
@@ -26,15 +25,13 @@ async def chat_completions(request: Request):
     if not messages:
         raise HTTPException(status_code=400, detail="messages 为空")
 
-    # 只取最后一条用户消息（和网页原始行为一致）
     last_user_msg = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "你好")
 
     payload = {
-        "conversation_id": ZAIWENAI_CONVERSATION_ID,
         "data": {
             "content": last_user_msg,
             "model": body.get("model", "Gemini-3.0-Flash"),
-            "round": 10,
+            "round": "10",
             "type": "text",
             "online": False,
             "file": {},
@@ -59,7 +56,15 @@ async def chat_completions(request: Request):
         "channel": "web.zaiwenai.com",
         "content-type": "application/json",
         "origin": "https://chat.zaiwenai.com",
-        "referer": "https://chat.zaiwenai.com/"
+        "referer": "https://chat.zaiwenai.com/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+        "accept": "*/*",
+        "sec-ch-ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"macOS"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-site"
     }
 
     resp = requests.post(ZAIWENAI_BASE_URL, headers=headers, json=payload, stream=True)
